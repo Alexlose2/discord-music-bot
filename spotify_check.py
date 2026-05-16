@@ -8,6 +8,11 @@ from spotipy.exceptions import SpotifyException
 from spotipy.oauth2 import SpotifyOAuth
 
 
+def safe_text(value: object) -> str:
+    text = "" if value is None else str(value)
+    return text.encode("ascii", errors="replace").decode("ascii")
+
+
 load_dotenv()
 
 client_id = os.getenv("SPOTIFY_CLIENT_ID")
@@ -44,12 +49,12 @@ spotify = spotipy.Spotify(
 )
 
 me = spotify.current_user()
-print(f"Cuenta autorizada: {me.get('display_name')} <{me.get('email')}>")
+print(f"Cuenta autorizada: {safe_text(me.get('display_name'))} <{safe_text(me.get('email'))}>")
 
 try:
     playlist = spotify.playlist(playlist_id)
-    print(f"Playlist: {playlist['name']}")
-    print(f"Owner: {playlist['owner']['display_name']}")
+    print(f"Playlist: {safe_text(playlist['name'])}")
+    print(f"Owner: {safe_text(playlist['owner']['display_name'])}")
     print(f"Publica: {playlist.get('public')}")
     print(f"Canciones: {playlist['tracks']['total']}")
 
@@ -57,13 +62,13 @@ try:
     for idx, item in enumerate(items["items"], start=1):
         track = item.get("track")
         if not track:
-            print(f"{idx}. Sin track legible: {item}")
+            print(f"{idx}. Sin track legible: {safe_text(item)}")
             continue
         if track.get("is_local"):
-            print(f"{idx}. Local de Spotify, no reproducible por API: {track.get('name')}")
+            print(f"{idx}. Local de Spotify, no reproducible por API: {safe_text(track.get('name'))}")
             continue
         artists = ", ".join(artist["name"] for artist in track["artists"])
-        print(f"{idx}. {artists} - {track['name']}")
+        print(f"{idx}. {safe_text(artists)} - {safe_text(track['name'])}")
 except SpotifyException as exc:
     print(f"Spotify error: HTTP {exc.http_status} - {exc.msg}")
     print("Si es 403, esa cuenta no tiene acceso API a esa playlist o faltan permisos.")
