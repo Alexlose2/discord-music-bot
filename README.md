@@ -7,6 +7,7 @@ Bot sencillo para Raspberry Pi con comandos slash:
 - `/resume`
 - `/skip`
 - `/queue`
+- `/shuffle`
 - `/stop`
 - `/leave`
 

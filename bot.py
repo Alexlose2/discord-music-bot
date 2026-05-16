@@ -1,5 +1,6 @@
 import asyncio
 import os
+import random
 import traceback
 from collections import deque
 from dataclasses import dataclass
@@ -76,6 +77,7 @@ class MusicState:
     def __init__(self) -> None:
         self.queue: deque[Song] = deque()
         self.current: Song | None = None
+        self.shuffle = False
         self.lock = asyncio.Lock()
 
 
@@ -237,7 +239,12 @@ async def play_next(guild: discord.Guild, channel: discord.abc.Messageable) -> N
             state.current = None
             return
 
-        song = state.queue.popleft()
+        if state.shuffle and len(state.queue) > 1:
+            song_index = random.randrange(len(state.queue))
+            song = state.queue[song_index]
+            del state.queue[song_index]
+        else:
+            song = state.queue.popleft()
         state.current = song
 
     voice_client = guild.voice_client
@@ -366,18 +373,33 @@ async def queue(interaction: discord.Interaction) -> None:
     guild_id = require_guild(interaction)
     state = bot.state_for(guild_id)
 
-    lines = []
+    lines = [f"Modo aleatorio: **{'activado' if state.shuffle else 'desactivado'}**"]
     if state.current:
         lines.append(f"Ahora: **{state.current.title}**")
 
     if state.queue:
         lines.extend(f"{idx}. {song.title}" for idx, song in enumerate(state.queue, start=1))
 
-    if not lines:
+    if len(lines) == 1:
         await interaction.response.send_message("La cola esta vacia.", ephemeral=True)
         return
 
     await interaction.response.send_message("\n".join(lines[:11]))
+
+
+@bot.tree.command(name="shuffle", description="Activa o desactiva el modo aleatorio.")
+@app_commands.describe(activar="Dejalo vacio para alternar el modo actual")
+async def shuffle(interaction: discord.Interaction, activar: bool | None = None) -> None:
+    guild_id = require_guild(interaction)
+    state = bot.state_for(guild_id)
+
+    if activar is None:
+        state.shuffle = not state.shuffle
+    else:
+        state.shuffle = activar
+
+    status = "activado" if state.shuffle else "desactivado"
+    await interaction.response.send_message(f"Modo aleatorio {status}.")
 
 
 @bot.tree.command(name="stop", description="Para la musica y vacia la cola.")
