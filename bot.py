@@ -122,6 +122,14 @@ def is_spotify_url(query: str) -> bool:
     return parsed.netloc in {"open.spotify.com", "www.open.spotify.com"}
 
 
+def spotify_type_and_id(url: str) -> tuple[str, str]:
+    parts = [part for part in urlparse(url).path.split("/") if part]
+    for index, part in enumerate(parts):
+        if part in {"track", "album", "playlist"} and index + 1 < len(parts):
+            return part, parts[index + 1]
+    raise RuntimeError("No reconozco ese enlace de Spotify.")
+
+
 def spotify_track_query(track: dict) -> str | None:
     if not track or track.get("is_local") or track.get("type") not in {None, "track"}:
         return None
@@ -140,12 +148,7 @@ def spotify_queries_from_url(url: str) -> list[str]:
             "Faltan SPOTIFY_CLIENT_ID y SPOTIFY_CLIENT_SECRET en el archivo .env"
         )
 
-    parsed = urlparse(url)
-    parts = [part for part in parsed.path.split("/") if part]
-    if len(parts) < 2:
-        raise RuntimeError("No reconozco ese enlace de Spotify.")
-
-    spotify_type, spotify_id = parts[0], parts[1]
+    spotify_type, spotify_id = spotify_type_and_id(url)
     queries: list[str] = []
 
     if spotify_type == "track":

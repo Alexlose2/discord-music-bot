@@ -22,7 +22,13 @@ if len(sys.argv) != 2:
     raise SystemExit("Uso: python spotify_check.py <url_playlist_spotify>")
 
 parts = [part for part in urlparse(sys.argv[1]).path.split("/") if part]
-if len(parts) < 2 or parts[0] != "playlist":
+playlist_id = None
+for index, part in enumerate(parts):
+    if part == "playlist" and index + 1 < len(parts):
+        playlist_id = parts[index + 1]
+        break
+
+if not playlist_id:
     raise SystemExit("Pasa una URL de playlist de Spotify.")
 
 spotify = spotipy.Spotify(
@@ -41,13 +47,13 @@ me = spotify.current_user()
 print(f"Cuenta autorizada: {me.get('display_name')} <{me.get('email')}>")
 
 try:
-    playlist = spotify.playlist(parts[1])
+    playlist = spotify.playlist(playlist_id)
     print(f"Playlist: {playlist['name']}")
     print(f"Owner: {playlist['owner']['display_name']}")
     print(f"Publica: {playlist.get('public')}")
     print(f"Canciones: {playlist['tracks']['total']}")
 
-    items = spotify.playlist_items(parts[1], additional_types=("track",), limit=5)
+    items = spotify.playlist_items(playlist_id, additional_types=("track",), limit=5)
     for idx, item in enumerate(items["items"], start=1):
         track = item.get("track")
         if not track:
