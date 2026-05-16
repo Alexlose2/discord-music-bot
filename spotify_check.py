@@ -47,15 +47,14 @@ try:
     print(f"Publica: {playlist.get('public')}")
     print(f"Canciones: {playlist['tracks']['total']}")
 
-    items = spotify.playlist_items(
-        parts[1],
-        fields="items(track(name,artists(name))),next",
-        additional_types=("track",),
-        limit=5,
-    )
+    items = spotify.playlist_items(parts[1], additional_types=("track",), limit=5)
     for idx, item in enumerate(items["items"], start=1):
         track = item.get("track")
         if not track:
+            print(f"{idx}. Sin track legible: {item}")
+            continue
+        if track.get("is_local"):
+            print(f"{idx}. Local de Spotify, no reproducible por API: {track.get('name')}")
             continue
         artists = ", ".join(artist["name"] for artist in track["artists"])
         print(f"{idx}. {artists} - {track['name']}")

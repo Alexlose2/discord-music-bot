@@ -123,7 +123,7 @@ def is_spotify_url(query: str) -> bool:
 
 
 def spotify_track_query(track: dict) -> str | None:
-    if not track or track.get("is_local"):
+    if not track or track.get("is_local") or track.get("type") not in {None, "track"}:
         return None
 
     artists = ", ".join(artist["name"] for artist in track.get("artists", []))
@@ -162,12 +162,7 @@ def spotify_queries_from_url(url: str) -> list[str]:
         return queries
 
     if spotify_type == "playlist":
-        results = spotify_client.playlist_items(
-            spotify_id,
-            fields="items(track(name,is_local,artists(name))),next",
-            additional_types=("track",),
-            limit=100,
-        )
+        results = spotify_client.playlist_items(spotify_id, additional_types=("track",), limit=100)
 
         while results and len(queries) < MAX_SPOTIFY_TRACKS:
             for item in results["items"]:
@@ -282,7 +277,11 @@ async def play(interaction: discord.Interaction, busqueda: str) -> None:
             return
 
         if not queries:
-            await interaction.followup.send("No he encontrado canciones reproducibles en ese enlace de Spotify.")
+            await interaction.followup.send(
+                "No he encontrado canciones reproducibles en ese enlace de Spotify. "
+                "Si la playlist tiene canciones, actualiza con `git pull` y prueba "
+                "`python spotify_check.py \"URL_DE_LA_PLAYLIST\"` en la Raspberry."
+            )
             return
 
         voice_client = await ensure_voice(interaction)
