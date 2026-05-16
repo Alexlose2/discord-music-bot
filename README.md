@@ -30,7 +30,7 @@ Bot sencillo para Raspberry Pi con comandos slash:
 ```bash
 sudo apt update
 sudo apt install -y git python3 python3-venv ffmpeg
-git clone REPO_URL discord-music-bot
+git clone https://github.com/Alexlose2/discord-music-bot.git discord-music-bot
 cd discord-music-bot
 python3 -m venv venv
 source venv/bin/activate
