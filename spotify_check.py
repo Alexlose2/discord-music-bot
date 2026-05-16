@@ -60,7 +60,7 @@ try:
     items = spotify.playlist_items(playlist_id, additional_types=("track",), limit=5)
     print(f"Canciones visibles en esta primera pagina: {len(items['items'])}")
     for idx, item in enumerate(items["items"], start=1):
-        track = item.get("track")
+        track = item.get("track") or item.get("item")
         if not track:
             print(f"{idx}. Sin track legible: {safe_text(item)}")
             continue

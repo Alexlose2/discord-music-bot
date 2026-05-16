@@ -171,7 +171,8 @@ def spotify_queries_from_url(url: str) -> list[str]:
             for item in results["items"]:
                 if len(queries) >= MAX_SPOTIFY_TRACKS:
                     break
-                query = spotify_track_query(item.get("track"))
+                track = item.get("track") or item.get("item")
+                query = spotify_track_query(track)
                 if query:
                     queries.append(query)
 
