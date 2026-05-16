@@ -56,9 +56,9 @@ try:
     print(f"Playlist: {safe_text(playlist['name'])}")
     print(f"Owner: {safe_text(playlist['owner']['display_name'])}")
     print(f"Publica: {playlist.get('public')}")
-    print(f"Canciones: {playlist['tracks']['total']}")
 
     items = spotify.playlist_items(playlist_id, additional_types=("track",), limit=5)
+    print(f"Canciones visibles en esta primera pagina: {len(items['items'])}")
     for idx, item in enumerate(items["items"], start=1):
         track = item.get("track")
         if not track:
