@@ -1,5 +1,6 @@
 import asyncio
 import os
+import traceback
 from collections import deque
 from dataclasses import dataclass
 
@@ -123,14 +124,20 @@ async def play_next(guild: discord.Guild, channel: discord.abc.Messageable) -> N
     if not voice_client or not voice_client.is_connected():
         return
 
-    source = discord.FFmpegPCMAudio(song.stream_url, **FFMPEG_OPTIONS)
-
     def after_play(error: Exception | None) -> None:
         if error:
             print(f"Error reproduciendo: {error}")
         asyncio.run_coroutine_threadsafe(play_next(guild, channel), bot.loop)
 
-    voice_client.play(source, after=after_play)
+    try:
+        source = discord.FFmpegPCMAudio(song.stream_url, **FFMPEG_OPTIONS)
+        voice_client.play(source, after=after_play)
+    except Exception as exc:
+        traceback.print_exc()
+        state.current = None
+        await channel.send(f"He entrado al canal, pero no puedo reproducir audio: `{exc}`")
+        return
+
     await channel.send(f"Reproduciendo: **{song.title}**\n<{song.webpage_url}>")
 
 
