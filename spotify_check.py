@@ -41,7 +41,7 @@ me = spotify.current_user()
 print(f"Cuenta autorizada: {me.get('display_name')} <{me.get('email')}>")
 
 try:
-    playlist = spotify.playlist(parts[1], fields="name,owner(display_name),public,tracks(total)")
+    playlist = spotify.playlist(parts[1])
     print(f"Playlist: {playlist['name']}")
     print(f"Owner: {playlist['owner']['display_name']}")
     print(f"Publica: {playlist.get('public')}")
