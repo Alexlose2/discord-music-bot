@@ -53,6 +53,27 @@ MAX_SPOTIFY_TRACKS=50
 
 Spotify se usa para leer titulos. El audio se busca y reproduce desde YouTube.
 
+Para playlists privadas, anade tambien:
+
+```env
+SPOTIFY_USE_USER_AUTH=true
+SPOTIFY_REDIRECT_URI=http://127.0.0.1:8888/callback
+```
+
+En la app de Spotify Developer, en **Redirect URIs**, anade exactamente:
+
+```text
+http://127.0.0.1:8888/callback
+```
+
+Despues ejecuta una vez:
+
+```bash
+python spotify_login.py
+```
+
+Abre la URL que salga, acepta, copia la URL final a la que te manda el navegador y pegala en la terminal si te la pide. Eso guarda un archivo local `.spotify_cache`.
+
 ## 3. Arrancar
 
 ```bash

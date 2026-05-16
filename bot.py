@@ -11,7 +11,8 @@ import yt_dlp
 from discord import app_commands
 from discord.ext import commands
 from dotenv import load_dotenv
-from spotipy.oauth2 import SpotifyClientCredentials
+from spotipy.exceptions import SpotifyException
+from spotipy.oauth2 import SpotifyClientCredentials, SpotifyOAuth
 
 
 load_dotenv()
@@ -20,7 +21,10 @@ TOKEN = os.getenv("DISCORD_TOKEN")
 GUILD_ID = os.getenv("GUILD_ID")
 SPOTIFY_CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID")
 SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET")
+SPOTIFY_USE_USER_AUTH = os.getenv("SPOTIFY_USE_USER_AUTH", "false").lower() == "true"
+SPOTIFY_REDIRECT_URI = os.getenv("SPOTIFY_REDIRECT_URI", "http://127.0.0.1:8888/callback")
 MAX_SPOTIFY_TRACKS = int(os.getenv("MAX_SPOTIFY_TRACKS", "50"))
+SPOTIFY_SCOPE = "playlist-read-private playlist-read-collaborative"
 
 YTDL_OPTIONS = {
     "format": "bestaudio/best",
@@ -39,7 +43,18 @@ FFMPEG_OPTIONS = {
 ytdl = yt_dlp.YoutubeDL(YTDL_OPTIONS)
 spotify_client: spotipy.Spotify | None = None
 
-if SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET:
+if SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET and SPOTIFY_USE_USER_AUTH:
+    spotify_client = spotipy.Spotify(
+        auth_manager=SpotifyOAuth(
+            client_id=SPOTIFY_CLIENT_ID,
+            client_secret=SPOTIFY_CLIENT_SECRET,
+            redirect_uri=SPOTIFY_REDIRECT_URI,
+            scope=SPOTIFY_SCOPE,
+            cache_path=".spotify_cache",
+            open_browser=False,
+        )
+    )
+elif SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET:
     spotify_client = spotipy.Spotify(
         auth_manager=SpotifyClientCredentials(
             client_id=SPOTIFY_CLIENT_ID,
@@ -170,7 +185,19 @@ def spotify_queries_from_url(url: str) -> list[str]:
 
 async def spotify_queries(url: str) -> list[str]:
     loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(None, lambda: spotify_queries_from_url(url))
+    try:
+        return await loop.run_in_executor(None, lambda: spotify_queries_from_url(url))
+    except SpotifyException as exc:
+        if exc.http_status == 401:
+            raise RuntimeError(
+                "Spotify pide autorizacion de usuario para esa playlist. "
+                "Pon SPOTIFY_USE_USER_AUTH=true y ejecuta python spotify_login.py"
+            ) from exc
+        if exc.http_status == 404:
+            raise RuntimeError(
+                "No encuentro esa playlist. Si es privada, activa SPOTIFY_USE_USER_AUTH."
+            ) from exc
+        raise
 
 
 def require_guild(interaction: discord.Interaction) -> int:
