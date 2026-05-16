@@ -52,6 +52,7 @@ if SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET and SPOTIFY_USE_USER_AUTH:
             scope=SPOTIFY_SCOPE,
             cache_path=".spotify_cache",
             open_browser=False,
+            show_dialog=True,
         )
     )
 elif SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET:
@@ -196,6 +197,12 @@ async def spotify_queries(url: str) -> list[str]:
         if exc.http_status == 404:
             raise RuntimeError(
                 "No encuentro esa playlist. Si es privada, activa SPOTIFY_USE_USER_AUTH."
+            ) from exc
+        if exc.http_status == 403:
+            raise RuntimeError(
+                "Spotify ha denegado acceso a esa playlist. Borra .spotify_cache, "
+                "ejecuta python spotify_login.py otra vez, y comprueba en Spotify Developer "
+                "que tu usuario esta anadido en User Management si la app esta en modo desarrollo."
             ) from exc
         raise
 

@@ -21,6 +21,7 @@ auth = SpotifyOAuth(
     scope=scope,
     cache_path=".spotify_cache",
     open_browser=False,
+    show_dialog=True,
 )
 
 token = auth.get_access_token(as_dict=True)

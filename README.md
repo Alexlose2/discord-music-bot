@@ -69,10 +69,13 @@ http://127.0.0.1:8888/callback
 Despues ejecuta una vez:
 
 ```bash
+rm -f .spotify_cache
 python spotify_login.py
 ```
 
 Abre la URL que salga, acepta, copia la URL final a la que te manda el navegador y pegala en la terminal si te la pide. Eso guarda un archivo local `.spotify_cache`.
+
+Si Spotify devuelve `403 Forbidden`, entra en tu app de Spotify Developer y revisa **User Management**. En apps en modo desarrollo, anade el email de la cuenta de Spotify que va a autorizar el bot.
 
 ## 3. Arrancar
 
