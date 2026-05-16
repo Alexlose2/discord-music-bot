@@ -144,10 +144,15 @@ async def on_ready() -> None:
 async def play(interaction: discord.Interaction, busqueda: str) -> None:
     guild_id = require_guild(interaction)
     await interaction.response.defer(thinking=True)
-    voice_client = await ensure_voice(interaction)
     state = bot.state_for(guild_id)
 
-    song = await extract_song(busqueda, interaction.user.display_name)
+    try:
+        song = await extract_song(busqueda, interaction.user.display_name)
+    except Exception as exc:
+        await interaction.followup.send(f"No he podido preparar esa cancion: `{exc}`")
+        return
+
+    voice_client = await ensure_voice(interaction)
     state.queue.append(song)
     await interaction.followup.send(f"Anadida a la cola: **{song.title}**")
 
