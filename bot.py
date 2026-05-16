@@ -3,18 +3,24 @@ import os
 import traceback
 from collections import deque
 from dataclasses import dataclass
+from urllib.parse import urlparse
 
 import discord
+import spotipy
 import yt_dlp
 from discord import app_commands
 from discord.ext import commands
 from dotenv import load_dotenv
+from spotipy.oauth2 import SpotifyClientCredentials
 
 
 load_dotenv()
 
 TOKEN = os.getenv("DISCORD_TOKEN")
 GUILD_ID = os.getenv("GUILD_ID")
+SPOTIFY_CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID")
+SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET")
+MAX_SPOTIFY_TRACKS = int(os.getenv("MAX_SPOTIFY_TRACKS", "50"))
 
 YTDL_OPTIONS = {
     "format": "bestaudio/best",
@@ -31,6 +37,15 @@ FFMPEG_OPTIONS = {
 }
 
 ytdl = yt_dlp.YoutubeDL(YTDL_OPTIONS)
+spotify_client: spotipy.Spotify | None = None
+
+if SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET:
+    spotify_client = spotipy.Spotify(
+        auth_manager=SpotifyClientCredentials(
+            client_id=SPOTIFY_CLIENT_ID,
+            client_secret=SPOTIFY_CLIENT_SECRET,
+        )
+    )
 
 
 @dataclass
@@ -84,6 +99,78 @@ async def extract_song(query: str, requested_by: str) -> Song:
         stream_url=data["url"],
         requested_by=requested_by,
     )
+
+
+def is_spotify_url(query: str) -> bool:
+    parsed = urlparse(query)
+    return parsed.netloc in {"open.spotify.com", "www.open.spotify.com"}
+
+
+def spotify_track_query(track: dict) -> str | None:
+    if not track or track.get("is_local"):
+        return None
+
+    artists = ", ".join(artist["name"] for artist in track.get("artists", []))
+    title = track.get("name")
+    if not title:
+        return None
+
+    return f"{artists} - {title} audio"
+
+
+def spotify_queries_from_url(url: str) -> list[str]:
+    if not spotify_client:
+        raise RuntimeError(
+            "Faltan SPOTIFY_CLIENT_ID y SPOTIFY_CLIENT_SECRET en el archivo .env"
+        )
+
+    parsed = urlparse(url)
+    parts = [part for part in parsed.path.split("/") if part]
+    if len(parts) < 2:
+        raise RuntimeError("No reconozco ese enlace de Spotify.")
+
+    spotify_type, spotify_id = parts[0], parts[1]
+    queries: list[str] = []
+
+    if spotify_type == "track":
+        track = spotify_client.track(spotify_id)
+        query = spotify_track_query(track)
+        return [query] if query else []
+
+    if spotify_type == "album":
+        album = spotify_client.album(spotify_id)
+        album_artists = ", ".join(artist["name"] for artist in album.get("artists", []))
+        for item in album["tracks"]["items"][:MAX_SPOTIFY_TRACKS]:
+            artists = ", ".join(artist["name"] for artist in item.get("artists", [])) or album_artists
+            queries.append(f"{artists} - {item['name']} audio")
+        return queries
+
+    if spotify_type == "playlist":
+        results = spotify_client.playlist_items(
+            spotify_id,
+            fields="items(track(name,is_local,artists(name))),next",
+            additional_types=("track",),
+            limit=100,
+        )
+
+        while results and len(queries) < MAX_SPOTIFY_TRACKS:
+            for item in results["items"]:
+                if len(queries) >= MAX_SPOTIFY_TRACKS:
+                    break
+                query = spotify_track_query(item.get("track"))
+                if query:
+                    queries.append(query)
+
+            results = spotify_client.next(results) if results.get("next") else None
+
+        return queries
+
+    raise RuntimeError("Solo soporto enlaces de cancion, album o playlist de Spotify.")
+
+
+async def spotify_queries(url: str) -> list[str]:
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, lambda: spotify_queries_from_url(url))
 
 
 def require_guild(interaction: discord.Interaction) -> int:
@@ -147,11 +234,51 @@ async def on_ready() -> None:
 
 
 @bot.tree.command(name="play", description="Reproduce una URL o busca una cancion.")
-@app_commands.describe(busqueda="URL de YouTube/SoundCloud o texto para buscar")
+@app_commands.describe(busqueda="URL de YouTube/SoundCloud/Spotify o texto para buscar")
 async def play(interaction: discord.Interaction, busqueda: str) -> None:
     guild_id = require_guild(interaction)
     await interaction.response.defer(thinking=True)
     state = bot.state_for(guild_id)
+
+    if is_spotify_url(busqueda):
+        try:
+            queries = await spotify_queries(busqueda)
+        except Exception as exc:
+            await interaction.followup.send(f"No he podido leer Spotify: `{exc}`")
+            return
+
+        if not queries:
+            await interaction.followup.send("No he encontrado canciones reproducibles en ese enlace de Spotify.")
+            return
+
+        voice_client = await ensure_voice(interaction)
+        await interaction.followup.send(
+            f"He encontrado {len(queries)} canciones en Spotify. Buscandolas en YouTube..."
+        )
+
+        added = 0
+        failed = 0
+        should_start = not voice_client.is_playing() and not voice_client.is_paused()
+
+        for query in queries:
+            try:
+                song = await extract_song(query, interaction.user.display_name)
+            except Exception:
+                failed += 1
+                continue
+
+            state.queue.append(song)
+            added += 1
+
+            if should_start:
+                should_start = False
+                await play_next(interaction.guild, interaction.channel)
+
+        message = f"Anadidas {added} canciones desde Spotify."
+        if failed:
+            message += f" No pude preparar {failed}."
+        await interaction.followup.send(message)
+        return
 
     try:
         song = await extract_song(busqueda, interaction.user.display_name)

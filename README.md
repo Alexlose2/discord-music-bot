@@ -43,6 +43,16 @@ Pon tu token en `DISCORD_TOKEN`.
 
 Opcional pero recomendado: en Discord, activa el modo desarrollador, copia el ID de tu servidor y ponlo en `GUILD_ID`. Asi los comandos slash suelen aparecer al instante.
 
+Para usar enlaces de Spotify, crea una app en <https://developer.spotify.com/dashboard> y pon tambien:
+
+```env
+SPOTIFY_CLIENT_ID=tu_client_id
+SPOTIFY_CLIENT_SECRET=tu_client_secret
+MAX_SPOTIFY_TRACKS=50
+```
+
+Spotify se usa para leer titulos. El audio se busca y reproduce desde YouTube.
+
 ## 3. Arrancar
 
 ```bash
