@@ -27,8 +27,12 @@ SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET")
 SPOTIFY_USE_USER_AUTH = os.getenv("SPOTIFY_USE_USER_AUTH", "false").lower() == "true"
 SPOTIFY_REDIRECT_URI = os.getenv("SPOTIFY_REDIRECT_URI", "http://127.0.0.1:8888/callback")
 SPOTIFY_CONNECT_DEVICE_NAME = os.getenv("SPOTIFY_CONNECT_DEVICE_NAME", "Discord Raspberry")
+SPOTIFY_JAM_LINK = os.getenv("SPOTIFY_JAM_LINK")
 MAX_SPOTIFY_TRACKS = int(os.getenv("MAX_SPOTIFY_TRACKS", "50"))
-SPOTIFY_SCOPE = "playlist-read-private playlist-read-collaborative"
+SPOTIFY_SCOPE = (
+    "playlist-read-private playlist-read-collaborative "
+    "user-read-playback-state user-modify-playback-state"
+)
 
 YTDL_OPTIONS = {
     "format": "bestaudio/best",
@@ -210,6 +214,43 @@ async def spotify_queries(url: str) -> list[str]:
                 "que tu usuario esta anadido en User Management si la app esta en modo desarrollo."
             ) from exc
         raise
+
+
+async def find_spotify_connect_device_id(device_name: str, timeout: int = 20) -> str | None:
+    if not spotify_client or not SPOTIFY_USE_USER_AUTH:
+        return None
+
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + timeout
+
+    while loop.time() < deadline:
+        devices = await loop.run_in_executor(None, spotify_client.devices)
+        for device in devices.get("devices", []):
+            if device.get("name") == device_name:
+                return device.get("id")
+        await asyncio.sleep(1)
+
+    return None
+
+
+async def start_spotify_on_connect_device(device_id: str, spotify_uri: str | None = None) -> None:
+    if not spotify_client:
+        raise RuntimeError("Faltan credenciales de Spotify con autenticacion de usuario.")
+
+    loop = asyncio.get_running_loop()
+
+    def transfer_and_play() -> None:
+        spotify_client.transfer_playback(device_id=device_id, force_play=False)
+        if spotify_uri:
+            spotify_type, spotify_id = spotify_type_and_id(spotify_uri)
+            if spotify_type == "track":
+                spotify_client.start_playback(device_id=device_id, uris=[f"spotify:track:{spotify_id}"])
+            else:
+                spotify_client.start_playback(device_id=device_id, context_uri=f"spotify:{spotify_type}:{spotify_id}")
+        else:
+            spotify_client.start_playback(device_id=device_id)
+
+    await loop.run_in_executor(None, transfer_and_play)
 
 
 def require_guild(interaction: discord.Interaction) -> int:
@@ -421,7 +462,15 @@ async def shuffle(interaction: discord.Interaction, activar: bool | None = None)
 
 
 @bot.tree.command(name="spotify_connect", description="Usa el canal de voz como salida de Spotify Connect.")
-async def spotify_connect(interaction: discord.Interaction) -> None:
+@app_commands.describe(
+    reproducir="Intenta transferir Spotify y darle play automaticamente",
+    spotify_url="Opcional: cancion, album o playlist de Spotify para empezar",
+)
+async def spotify_connect(
+    interaction: discord.Interaction,
+    reproducir: bool = True,
+    spotify_url: str | None = None,
+) -> None:
     guild_id = require_guild(interaction)
     await interaction.response.defer(thinking=True)
 
@@ -449,7 +498,7 @@ async def spotify_connect(interaction: discord.Interaction) -> None:
         "--format",
         "S16",
         "--bitrate",
-        "320",
+        "160",
         "--disable-audio-cache",
     ]
 
@@ -490,9 +539,28 @@ async def spotify_connect(interaction: discord.Interaction) -> None:
         await interaction.followup.send(f"No he podido enviar Spotify Connect al canal: `{exc}`")
         return
 
-    await interaction.followup.send(
-        f"Spotify Connect activo. En Spotify busca el dispositivo **{SPOTIFY_CONNECT_DEVICE_NAME}**."
-    )
+    message = f"Spotify Connect activo. Dispositivo: **{SPOTIFY_CONNECT_DEVICE_NAME}**."
+
+    if reproducir:
+        if spotify_url and not is_spotify_url(spotify_url):
+            message += "\nNo he iniciado musica: el enlace opcional no parece de Spotify."
+        elif not spotify_client or not SPOTIFY_USE_USER_AUTH:
+            message += (
+                "\nNo puedo iniciar Spotify solo: pon `SPOTIFY_USE_USER_AUTH=true` "
+                "y ejecuta `rm -f .spotify_cache && python spotify_login.py`."
+            )
+        else:
+            try:
+                device_id = await find_spotify_connect_device_id(SPOTIFY_CONNECT_DEVICE_NAME)
+                if not device_id:
+                    message += "\nNo he visto el dispositivo en la API de Spotify a tiempo. Prueba otra vez."
+                else:
+                    await start_spotify_on_connect_device(device_id, spotify_url)
+                    message += "\nHe transferido Spotify al bot y he enviado play."
+            except Exception as exc:
+                message += f"\nSpotify Connect esta activo, pero no pude iniciar musica: `{exc}`"
+
+    await interaction.followup.send(message)
 
 
 @bot.tree.command(name="spotify_connect_stop", description="Para el modo Spotify Connect.")
@@ -506,6 +574,18 @@ async def spotify_connect_stop(interaction: discord.Interaction) -> None:
         voice_client.stop()
 
     await interaction.response.send_message("Spotify Connect parado.")
+
+
+@bot.tree.command(name="jam", description="Manda el enlace de la Jam de Spotify configurada.")
+async def jam(interaction: discord.Interaction) -> None:
+    if not SPOTIFY_JAM_LINK:
+        await interaction.response.send_message(
+            "No hay enlace de Jam configurado. Pon `SPOTIFY_JAM_LINK=...` en `.env`.",
+            ephemeral=True,
+        )
+        return
+
+    await interaction.response.send_message(f"Jam de Spotify:\n{SPOTIFY_JAM_LINK}")
 
 
 @bot.tree.command(name="stop", description="Para la musica y vacia la cola.")

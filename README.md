@@ -10,6 +10,7 @@ Bot sencillo para Raspberry Pi con comandos slash:
 - `/shuffle`
 - `/spotify_connect`
 - `/spotify_connect_stop`
+- `/jam`
 - `/stop`
 - `/leave`
 
@@ -80,6 +81,13 @@ Abre la URL que salga, acepta, copia la URL final a la que te manda el navegador
 
 Si Spotify devuelve `403 Forbidden`, entra en tu app de Spotify Developer y revisa **User Management**. En apps en modo desarrollo, anade el email de la cuenta de Spotify que va a autorizar el bot.
 
+Si ya habias hecho login antes y actualizas el bot, vuelve a autorizar para aceptar permisos de reproduccion:
+
+```bash
+rm -f .spotify_cache
+python spotify_login.py
+```
+
 ## Spotify Connect experimental
 
 El bot tambien puede intentar actuar como salida de Spotify Connect dentro del canal de voz. Es experimental, requiere Spotify Premium y usa `librespot`.
@@ -106,13 +114,37 @@ Arranca el bot y usa:
 /spotify_connect
 ```
 
-Luego abre Spotify y elige el dispositivo `Discord Raspberry`. Para pararlo:
+El bot intentara transferir tu Spotify a `Discord Raspberry` y empezar a reproducir solo. Tambien puedes decirle con que empezar:
+
+```text
+/spotify_connect spotify_url:https://open.spotify.com/playlist/...
+```
+
+Si quieres solo abrir el altavoz sin darle play automaticamente:
+
+```text
+/spotify_connect reproducir:false
+```
+
+Para pararlo:
 
 ```text
 /spotify_connect_stop
 ```
 
 Si no aparece en Spotify, reinicia el bot y comprueba que `librespot --version` funciona en la Raspberry.
+
+Spotify no ofrece API publica para crear una Jam automaticamente. Si quieres que el bot mande un enlace de Jam, crea la Jam en Spotify, copia el enlace y ponlo en `.env`:
+
+```env
+SPOTIFY_JAM_LINK=https://spotify.link/tu-jam
+```
+
+Luego usa:
+
+```text
+/jam
+```
 
 ## 3. Arrancar
 

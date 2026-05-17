@@ -9,7 +9,10 @@ load_dotenv()
 client_id = os.getenv("SPOTIFY_CLIENT_ID")
 client_secret = os.getenv("SPOTIFY_CLIENT_SECRET")
 redirect_uri = os.getenv("SPOTIFY_REDIRECT_URI", "http://127.0.0.1:8888/callback")
-scope = "playlist-read-private playlist-read-collaborative"
+scope = (
+    "playlist-read-private playlist-read-collaborative "
+    "user-read-playback-state user-modify-playback-state"
+)
 
 if not client_id or not client_secret:
     raise SystemExit("Faltan SPOTIFY_CLIENT_ID y SPOTIFY_CLIENT_SECRET en .env")
