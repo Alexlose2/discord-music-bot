@@ -10,6 +10,7 @@ Bot sencillo para Raspberry Pi con comandos slash:
 - `/shuffle`
 - `/spotify_connect`
 - `/spotify_connect_stop`
+- `/spotify_devices`
 - `/jam`
 - `/stop`
 - `/leave`
@@ -106,6 +107,7 @@ Opcionalmente pon el nombre del dispositivo en `.env`:
 
 ```env
 SPOTIFY_CONNECT_DEVICE_NAME=Discord Raspberry
+SPOTIFY_CONNECT_DEVICE_TIMEOUT=60
 ```
 
 Arranca el bot y usa:
@@ -133,6 +135,14 @@ Para pararlo:
 ```
 
 Si no aparece en Spotify, reinicia el bot y comprueba que `librespot --version` funciona en la Raspberry.
+
+Si el bot no consigue iniciar la musica solo, usa:
+
+```text
+/spotify_devices
+```
+
+Ese comando muestra que dispositivos ve la API de Spotify en tu cuenta. Si `Discord Raspberry` no sale ahi, abre Spotify una vez y selecciona manualmente `Discord Raspberry`; despues vuelve a probar `/spotify_connect`.
 
 Spotify no ofrece API publica para crear una Jam automaticamente. Si quieres que el bot mande un enlace de Jam, crea la Jam en Spotify, copia el enlace y ponlo en `.env`:
 

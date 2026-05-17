@@ -27,6 +27,7 @@ SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET")
 SPOTIFY_USE_USER_AUTH = os.getenv("SPOTIFY_USE_USER_AUTH", "false").lower() == "true"
 SPOTIFY_REDIRECT_URI = os.getenv("SPOTIFY_REDIRECT_URI", "http://127.0.0.1:8888/callback")
 SPOTIFY_CONNECT_DEVICE_NAME = os.getenv("SPOTIFY_CONNECT_DEVICE_NAME", "Discord Raspberry")
+SPOTIFY_CONNECT_DEVICE_TIMEOUT = int(os.getenv("SPOTIFY_CONNECT_DEVICE_TIMEOUT", "60"))
 SPOTIFY_JAM_LINK = os.getenv("SPOTIFY_JAM_LINK")
 MAX_SPOTIFY_TRACKS = int(os.getenv("MAX_SPOTIFY_TRACKS", "50"))
 SPOTIFY_SCOPE = (
@@ -216,17 +217,21 @@ async def spotify_queries(url: str) -> list[str]:
         raise
 
 
-async def find_spotify_connect_device_id(device_name: str, timeout: int = 20) -> str | None:
+async def find_spotify_connect_device_id(device_name: str, timeout: int = SPOTIFY_CONNECT_DEVICE_TIMEOUT) -> str | None:
     if not spotify_client or not SPOTIFY_USE_USER_AUTH:
         return None
 
     loop = asyncio.get_running_loop()
     deadline = loop.time() + timeout
+    wanted_name = device_name.casefold()
 
     while loop.time() < deadline:
         devices = await loop.run_in_executor(None, spotify_client.devices)
         for device in devices.get("devices", []):
-            if device.get("name") == device_name:
+            device_name_value = str(device.get("name", ""))
+            if device_name_value.casefold() == wanted_name:
+                return device.get("id")
+            if wanted_name in device_name_value.casefold():
                 return device.get("id")
         await asyncio.sleep(1)
 
@@ -574,6 +579,32 @@ async def spotify_connect_stop(interaction: discord.Interaction) -> None:
         voice_client.stop()
 
     await interaction.response.send_message("Spotify Connect parado.")
+
+
+@bot.tree.command(name="spotify_devices", description="Muestra los dispositivos que Spotify ve en tu cuenta.")
+async def spotify_devices(interaction: discord.Interaction) -> None:
+    if not spotify_client or not SPOTIFY_USE_USER_AUTH:
+        await interaction.response.send_message(
+            "Necesito `SPOTIFY_USE_USER_AUTH=true` y `python spotify_login.py`.",
+            ephemeral=True,
+        )
+        return
+
+    await interaction.response.defer(ephemeral=True, thinking=True)
+    loop = asyncio.get_running_loop()
+    devices = await loop.run_in_executor(None, spotify_client.devices)
+    device_list = devices.get("devices", [])
+
+    if not device_list:
+        await interaction.followup.send("Spotify no ve ningun dispositivo activo ahora mismo.", ephemeral=True)
+        return
+
+    lines = []
+    for device in device_list:
+        active = "activo" if device.get("is_active") else "inactivo"
+        lines.append(f"- {device.get('name')} ({device.get('type')}, {active})")
+
+    await interaction.followup.send("\n".join(lines), ephemeral=True)
 
 
 @bot.tree.command(name="jam", description="Manda el enlace de la Jam de Spotify configurada.")
