@@ -295,6 +295,17 @@ def stop_spotify_connect_process(state: MusicState) -> None:
         process.kill()
 
 
+def stop_external_librespot_processes() -> None:
+    librespot_path = shutil.which("librespot")
+    if not librespot_path:
+        return
+
+    try:
+        subprocess.run(["pkill", "-x", "librespot"], check=False)
+    except Exception:
+        return
+
+
 async def play_next(guild: discord.Guild, channel: discord.abc.Messageable) -> None:
     state = bot.state_for(guild.id)
 
@@ -491,6 +502,7 @@ async def spotify_connect(
     voice_client = await ensure_voice(interaction)
 
     stop_spotify_connect_process(state)
+    stop_external_librespot_processes()
     if voice_client.is_playing() or voice_client.is_paused():
         voice_client.stop()
 
@@ -504,7 +516,8 @@ async def spotify_connect(
         "S16",
         "--bitrate",
         "160",
-        "--disable-audio-cache",
+        "--initial-volume",
+        "90",
     ]
 
     try:
@@ -528,7 +541,7 @@ async def spotify_connect(
     source = discord.FFmpegPCMAudio(
         process.stdout,
         pipe=True,
-        before_options="-f s16le -ar 44100 -ac 2",
+        before_options="-re -f s16le -ar 44100 -ac 2",
         options="-vn",
     )
 
