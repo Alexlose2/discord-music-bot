@@ -1,6 +1,8 @@
 import asyncio
 import os
 import random
+import shutil
+import subprocess
 import traceback
 from collections import deque
 from dataclasses import dataclass
@@ -24,6 +26,7 @@ SPOTIFY_CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID")
 SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET")
 SPOTIFY_USE_USER_AUTH = os.getenv("SPOTIFY_USE_USER_AUTH", "false").lower() == "true"
 SPOTIFY_REDIRECT_URI = os.getenv("SPOTIFY_REDIRECT_URI", "http://127.0.0.1:8888/callback")
+SPOTIFY_CONNECT_DEVICE_NAME = os.getenv("SPOTIFY_CONNECT_DEVICE_NAME", "Discord Raspberry")
 MAX_SPOTIFY_TRACKS = int(os.getenv("MAX_SPOTIFY_TRACKS", "50"))
 SPOTIFY_SCOPE = "playlist-read-private playlist-read-collaborative"
 
@@ -78,6 +81,7 @@ class MusicState:
         self.queue: deque[Song] = deque()
         self.current: Song | None = None
         self.shuffle = False
+        self.spotify_connect_process: subprocess.Popen | None = None
         self.lock = asyncio.Lock()
 
 
@@ -229,6 +233,20 @@ async def ensure_voice(interaction: discord.Interaction) -> discord.VoiceClient:
         return voice_client
 
     return await voice_state.channel.connect()
+
+
+def stop_spotify_connect_process(state: MusicState) -> None:
+    process = state.spotify_connect_process
+    state.spotify_connect_process = None
+
+    if not process or process.poll() is not None:
+        return
+
+    process.terminate()
+    try:
+        process.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        process.kill()
 
 
 async def play_next(guild: discord.Guild, channel: discord.abc.Messageable) -> None:
@@ -402,12 +420,101 @@ async def shuffle(interaction: discord.Interaction, activar: bool | None = None)
     await interaction.response.send_message(f"Modo aleatorio {status}.")
 
 
+@bot.tree.command(name="spotify_connect", description="Usa el canal de voz como salida de Spotify Connect.")
+async def spotify_connect(interaction: discord.Interaction) -> None:
+    guild_id = require_guild(interaction)
+    await interaction.response.defer(thinking=True)
+
+    if not shutil.which("librespot"):
+        await interaction.followup.send(
+            "No encuentro `librespot` en la Raspberry. Instala primero: "
+            "`sudo apt install -y cargo build-essential libasound2-dev pkg-config && "
+            "cargo install librespot`"
+        )
+        return
+
+    state = bot.state_for(guild_id)
+    voice_client = await ensure_voice(interaction)
+
+    stop_spotify_connect_process(state)
+    if voice_client.is_playing() or voice_client.is_paused():
+        voice_client.stop()
+
+    command = [
+        "librespot",
+        "--name",
+        SPOTIFY_CONNECT_DEVICE_NAME,
+        "--backend",
+        "pipe",
+        "--format",
+        "S16",
+        "--bitrate",
+        "320",
+        "--disable-audio-cache",
+    ]
+
+    try:
+        process = subprocess.Popen(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL,
+        )
+    except Exception as exc:
+        await interaction.followup.send(f"No he podido arrancar Spotify Connect: `{exc}`")
+        return
+
+    if not process.stdout:
+        process.kill()
+        await interaction.followup.send("librespot no ha abierto salida de audio.")
+        return
+
+    state.spotify_connect_process = process
+
+    source = discord.FFmpegPCMAudio(
+        process.stdout,
+        pipe=True,
+        before_options="-f s16le -ar 44100 -ac 2",
+        options="-vn",
+    )
+
+    def after_connect(error: Exception | None) -> None:
+        if error:
+            print(f"Error en Spotify Connect: {error}")
+        stop_spotify_connect_process(state)
+
+    try:
+        voice_client.play(source, after=after_connect)
+    except Exception as exc:
+        stop_spotify_connect_process(state)
+        await interaction.followup.send(f"No he podido enviar Spotify Connect al canal: `{exc}`")
+        return
+
+    await interaction.followup.send(
+        f"Spotify Connect activo. En Spotify busca el dispositivo **{SPOTIFY_CONNECT_DEVICE_NAME}**."
+    )
+
+
+@bot.tree.command(name="spotify_connect_stop", description="Para el modo Spotify Connect.")
+async def spotify_connect_stop(interaction: discord.Interaction) -> None:
+    guild_id = require_guild(interaction)
+    state = bot.state_for(guild_id)
+    stop_spotify_connect_process(state)
+
+    voice_client = interaction.guild.voice_client if interaction.guild else None
+    if voice_client and (voice_client.is_playing() or voice_client.is_paused()):
+        voice_client.stop()
+
+    await interaction.response.send_message("Spotify Connect parado.")
+
+
 @bot.tree.command(name="stop", description="Para la musica y vacia la cola.")
 async def stop(interaction: discord.Interaction) -> None:
     guild_id = require_guild(interaction)
     state = bot.state_for(guild_id)
     state.queue.clear()
     state.current = None
+    stop_spotify_connect_process(state)
 
     voice_client = interaction.guild.voice_client if interaction.guild else None
     if voice_client:
@@ -422,6 +529,7 @@ async def leave(interaction: discord.Interaction) -> None:
     state = bot.state_for(guild_id)
     state.queue.clear()
     state.current = None
+    stop_spotify_connect_process(state)
 
     voice_client = interaction.guild.voice_client if interaction.guild else None
     if voice_client and voice_client.is_connected():

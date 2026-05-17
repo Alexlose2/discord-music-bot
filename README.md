@@ -8,6 +8,8 @@ Bot sencillo para Raspberry Pi con comandos slash:
 - `/skip`
 - `/queue`
 - `/shuffle`
+- `/spotify_connect`
+- `/spotify_connect_stop`
 - `/stop`
 - `/leave`
 
@@ -77,6 +79,40 @@ python spotify_login.py
 Abre la URL que salga, acepta, copia la URL final a la que te manda el navegador y pegala en la terminal si te la pide. Eso guarda un archivo local `.spotify_cache`.
 
 Si Spotify devuelve `403 Forbidden`, entra en tu app de Spotify Developer y revisa **User Management**. En apps en modo desarrollo, anade el email de la cuenta de Spotify que va a autorizar el bot.
+
+## Spotify Connect experimental
+
+El bot tambien puede intentar actuar como salida de Spotify Connect dentro del canal de voz. Es experimental, requiere Spotify Premium y usa `librespot`.
+
+Instala `librespot` en la Raspberry:
+
+```bash
+sudo apt update
+sudo apt install -y cargo build-essential libasound2-dev pkg-config
+cargo install librespot
+echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> ~/.bashrc
+source ~/.bashrc
+```
+
+Opcionalmente pon el nombre del dispositivo en `.env`:
+
+```env
+SPOTIFY_CONNECT_DEVICE_NAME=Discord Raspberry
+```
+
+Arranca el bot y usa:
+
+```text
+/spotify_connect
+```
+
+Luego abre Spotify y elige el dispositivo `Discord Raspberry`. Para pararlo:
+
+```text
+/spotify_connect_stop
+```
+
+Si no aparece en Spotify, reinicia el bot y comprueba que `librespot --version` funciona en la Raspberry.
 
 ## 3. Arrancar
 
